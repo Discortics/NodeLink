@@ -1616,11 +1616,7 @@ async function http1makeRequest(
       const useReverseProxy = shouldUseReverseProxy(proxy)
       if (useReverseProxy && proxy?.url) {
         finalUrl = `${proxy.url.replace(/\/+$/, '')}/${urlString}`
-        logger(
-          'debug',
-          'Network',
-          `Using reverse proxy: ${proxy.url} for ${urlString}`
-        )
+        logger('debug', 'Network', 'Using configured reverse proxy')
       }
 
       const url = new URL(finalUrl)
@@ -1640,14 +1636,10 @@ async function http1makeRequest(
             logger(
               'debug',
               'Network',
-              `Using proxy for ${url.hostname}: ${proxy.url}`
+              `Using configured forward proxy for ${url.hostname}`
             )
           } else {
-            logger(
-              'warn',
-              'Network',
-              'Proxy configured but proxy-agent not installed.'
-            )
+            throw new Error('Proxy configured but proxy-agent is unavailable.')
           }
         }
 
@@ -1756,8 +1748,11 @@ async function makeRequest(
     )
   }
 
-  if (options.network?.proxy) {
-    return http1makeRequest(urlString, options)
+  if (options.proxy || options.network?.proxy) {
+    return http1makeRequest(urlString, {
+      ...options,
+      proxy: options.proxy ?? options.network?.proxy
+    })
   }
 
   const localAddress = finalNodeLink?.routePlanner?.getIP?.() ?? undefined
@@ -1767,6 +1762,7 @@ async function makeRequest(
     !streamOnly &&
     !body &&
     !localAddress &&
+    !options.proxy &&
     !options.network?.proxy &&
     (method === 'GET' || method === 'HEAD')
   ) {
@@ -2540,7 +2536,7 @@ function applyEnvOverrides(
           logger(
             'warn',
             'Config',
-            `Environment variable ${envVarName} has invalid array value "${envValue}"; keeping default.`
+            `Environment variable ${envVarName} has invalid array value; keeping default.`
           )
         }
       }

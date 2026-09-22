@@ -35,6 +35,7 @@ export default class HLSHandler extends PassThrough {
     username?: string
     password?: string
   } | null
+  private readonly onRequest: HLSHandlerOptions['onRequest']
   private readonly onResolveUrl:
     | ((url: string) => Promise<string | null>)
     | null
@@ -72,6 +73,7 @@ export default class HLSHandler extends PassThrough {
     this.headers = options.headers ?? {}
     this.localAddress = options.localAddress ?? null
     this.proxy = options.network?.proxy ?? options.proxy ?? null
+    this.onRequest = options.onRequest
     this.onResolveUrl = options.onResolveUrl ?? null
     this.strategy =
       options.strategy ??
@@ -82,6 +84,7 @@ export default class HLSHandler extends PassThrough {
       headers: this.headers,
       localAddress: this.localAddress,
       proxy: this.proxy ?? undefined,
+      onRequest: this.onRequest,
       onResolveUrl: this.onResolveUrl ?? undefined
     })
 
@@ -174,12 +177,18 @@ export default class HLSHandler extends PassThrough {
     if (this.stop) return
 
     try {
+      const start = Date.now()
       const response = await http1makeRequest(this.currentUrl, {
         headers: this.headers,
         method: 'GET',
         localAddress: this.localAddress ?? undefined,
         proxy: this.proxy ?? undefined
       })
+      this.onRequest?.(
+        'playlist',
+        response.statusCode ?? 'error',
+        Date.now() - start
+      )
 
       const { body: playlistContent, error, statusCode } = response
 

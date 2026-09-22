@@ -124,6 +124,9 @@ export interface YouTubeSourceConfig {
   /** Pool of proxy endpoints used exclusively for YouTube traffic. */
   proxies: ProxyEndpoint[]
 
+  /** Selects which YouTube request classes use a configured proxy. */
+  proxyMode: 'off' | 'control' | 'all'
+
   /** Ordered list of alternative sources tried if YouTube resolution fails. */
   fallbackSources: string[]
 
@@ -1116,6 +1119,7 @@ export interface LoggingSection {
     sources: boolean
     lyrics: boolean
     youtube: boolean
+    youtubeRouting: boolean
     'youtube-cipher': boolean
     sabr: boolean
     potoken: boolean

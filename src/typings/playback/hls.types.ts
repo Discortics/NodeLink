@@ -231,6 +231,11 @@ export type HLSFetchStrategy = 'segmented' | 'streaming' | 'sequential'
  * @public
  */
 export interface HLSHandlerOptions {
+  onRequest?: (
+    operation: string,
+    status: number | string,
+    durationMs: number
+  ) => void
   /** High water mark for stream buffer in bytes */
   highWaterMark?: number
   /** HTTP headers to include in requests */
@@ -282,6 +287,11 @@ export interface HLSSegmentFetchResult {
  * @public
  */
 export interface SegmentFetcherOptions {
+  onRequest?: (
+    operation: string,
+    status: number | string,
+    durationMs: number
+  ) => void
   /** HTTP headers for segment requests */
   headers?: Record<string, string>
   /** Local address to bind to */

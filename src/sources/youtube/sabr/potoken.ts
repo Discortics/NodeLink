@@ -2,6 +2,8 @@ import { Buffer } from 'node:buffer'
 import { appendFile } from 'node:fs/promises'
 import path from 'node:path'
 import { logger } from '../../../utils.ts'
+import type { HttpProxyConfig } from '../../../typings/utils.types.ts'
+import { youtubeFetch } from '../egress.ts'
 import { base64ToU8 } from './protor.ts'
 
 /**
@@ -303,6 +305,21 @@ interface AttestationChallenge {
  * @public
  */
 export class PoTokenManager {
+  private proxyResolver: (() => HttpProxyConfig | undefined) | null = null
+
+  public setProxyResolver(resolver: () => HttpProxyConfig | undefined): void {
+    this.proxyResolver = resolver
+  }
+
+  private fetchYouTube(url: string, init: RequestInit = {}): Promise<Response> {
+    return youtubeFetch(
+      url,
+      init,
+      this.proxyResolver?.(),
+      'po-token',
+      'control'
+    )
+  }
   private botguard: BotGuardClient | null = null
   private minter: WebPoMinter | null = null
   private visitorData: string | null = null
@@ -432,7 +449,7 @@ export class PoTokenManager {
    */
   public async fetchVisitorData(): Promise<string> {
     try {
-      const response = await fetch('https://www.youtube.com', {
+      const response = await this.fetchYouTube('https://www.youtube.com', {
         headers: { 'user-agent': PO_CONFIG.userAgent }
       })
       const html = await response.text()
@@ -455,7 +472,7 @@ export class PoTokenManager {
     AttestationChallenge | undefined
   > {
     try {
-      const res = await fetch('https://www.youtube.com', {
+      const res = await this.fetchYouTube('https://www.youtube.com', {
         headers: {
           accept: '*/*',
           'accept-language': 'en-US,en;q=0.7',
@@ -540,7 +557,7 @@ export class PoTokenManager {
   private async getAttestationChallenge(
     visitorData: string
   ): Promise<AttestationChallenge> {
-    const response = await fetch(
+    const response = await this.fetchYouTube(
       `${PO_CONFIG.ytBaseUrl}/youtubei/v1/att/get?key=${PO_CONFIG.apiKey}`,
       {
         method: 'POST',
@@ -680,7 +697,7 @@ export class PoTokenManager {
         .private_do_not_access_or_else_trusted_resource_url_wrapped_value
 
     logger('debug', 'PoToken', `Fetching interpreter from: ${interpreterUrl}`)
-    const bgScriptResponse = await fetch(`https:${interpreterUrl}`)
+    const bgScriptResponse = await this.fetchYouTube(`https:${interpreterUrl}`)
     const interpreterJavascript = await bgScriptResponse.text()
     if (!interpreterJavascript) throw new Error('Could not load BotGuard VM')
 
@@ -698,16 +715,19 @@ export class PoTokenManager {
     const botguardResponse = await this.botguard.snapshot({ webPoSignalOutput })
 
     const requestKey = 'O43z0dpjhgX20SCx4KAo'
-    const integrityTokenResponse = await fetch(buildURL('GenerateIT', true), {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json+protobuf',
-        'x-goog-api-key': PO_CONFIG.apiKey,
-        'x-user-agent': 'grpc-web-javascript/0.1',
-        'user-agent': PO_CONFIG.userAgent
-      },
-      body: JSON.stringify([requestKey, botguardResponse])
-    })
+    const integrityTokenResponse = await this.fetchYouTube(
+      buildURL('GenerateIT', true),
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json+protobuf',
+          'x-goog-api-key': PO_CONFIG.apiKey,
+          'x-user-agent': 'grpc-web-javascript/0.1',
+          'user-agent': PO_CONFIG.userAgent
+        },
+        body: JSON.stringify([requestKey, botguardResponse])
+      }
+    )
 
     const response = (await integrityTokenResponse.json()) as unknown[]
     let token = ''

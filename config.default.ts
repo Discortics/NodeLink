@@ -74,6 +74,7 @@ export const config: NodelinkConfig = {
       sources: true,
       lyrics: true,
       youtube: true,
+      youtubeRouting: false,
       'youtube-cipher': true,
       sabr: false,
       potoken: false
@@ -303,6 +304,7 @@ export const config: NodelinkConfig = {
       hl: 'en',
       gl: 'US',
       proxies: [],
+      proxyMode: 'all',
       mirrorOfficialAlbums: false,
       fallbackSources: [
         'soundcloud',

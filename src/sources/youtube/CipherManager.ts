@@ -29,6 +29,7 @@ import {
   logger,
   makeRequest
 } from '../../utils.ts'
+import { logYouTubeEgress } from './egress.ts'
 
 const CACHE_DURATION_MS = 12 * 60 * 60 * 1000
 const VERSION = getVersion()
@@ -319,6 +320,13 @@ export default class CipherManager implements ICipherManager {
         response = await makeRequest(playerUrl, { method: 'GET', proxy })
       } catch (error) {
         this.reportProxyStatus(proxy, false, 500, Date.now() - startTime)
+        logYouTubeEgress(
+          'player-script',
+          'control',
+          proxy,
+          'error',
+          Date.now() - startTime
+        )
         throw error
       }
 
@@ -327,6 +335,13 @@ export default class CipherManager implements ICipherManager {
         proxy,
         !error && statusCode === 200,
         statusCode ?? 500,
+        Date.now() - startTime
+      )
+      logYouTubeEgress(
+        'player-script',
+        'control',
+        proxy,
+        statusCode ?? 'error',
         Date.now() - startTime
       )
 
@@ -380,7 +395,6 @@ export default class CipherManager implements ICipherManager {
 
     logger('debug', 'YouTube-Cipher', `Fetching STS via /get_sts: ${playerUrl}`)
 
-    const proxy = this.pickProxy(true)
     const startTime = Date.now()
     let response: Awaited<ReturnType<typeof makeRequest>>
     try {
@@ -388,19 +402,25 @@ export default class CipherManager implements ICipherManager {
         method: 'POST',
         headers,
         body: { player_url: playerUrl },
-        disableBodyCompression: true,
-        proxy
+        disableBodyCompression: true
       })
     } catch (error) {
-      this.reportProxyStatus(proxy, false, 500, Date.now() - startTime)
+      logYouTubeEgress(
+        'cipher-sts',
+        'internal',
+        undefined,
+        'error',
+        Date.now() - startTime
+      )
       throw error
     }
 
     const { body, error, statusCode } = response
-    this.reportProxyStatus(
-      proxy,
-      !error && statusCode === 200,
-      statusCode ?? 500,
+    logYouTubeEgress(
+      'cipher-sts',
+      'internal',
+      undefined,
+      statusCode ?? 'error',
       Date.now() - startTime
     )
 
@@ -452,22 +472,20 @@ export default class CipherManager implements ICipherManager {
         headers.Authorization = this.config.token
       }
 
-      const proxy = this.pickProxy(true)
       const startTime = Date.now()
       const { statusCode, error } = await http1makeRequest(
         `${this.config.url}/`,
         {
           method: 'GET',
           timeout: 5000,
-          headers,
-          proxy
+          headers
         }
       )
-
-      this.reportProxyStatus(
-        proxy,
-        !error && statusCode === 200,
-        statusCode ?? 500,
+      logYouTubeEgress(
+        'cipher-health',
+        'internal',
+        undefined,
+        statusCode ?? 'error',
         Date.now() - startTime
       )
 
@@ -487,7 +505,7 @@ export default class CipherManager implements ICipherManager {
       )
       return true
     } catch {
-      this.reportProxyStatus(undefined, false, 500, 0)
+      logYouTubeEgress('cipher-health', 'internal', undefined, 'error', 0)
       logger(
         'warn',
         'YouTube-Cipher',
@@ -565,7 +583,6 @@ export default class CipherManager implements ICipherManager {
       `Sending to cipher service for player ${playerScript.url}`
     )
 
-    const proxy = this.pickProxy(true)
     const startTime = Date.now()
     let response: Awaited<ReturnType<typeof makeRequest>>
     try {
@@ -573,19 +590,25 @@ export default class CipherManager implements ICipherManager {
         method: 'POST',
         headers,
         body: requestBody,
-        disableBodyCompression: true,
-        proxy
+        disableBodyCompression: true
       })
     } catch (error) {
-      this.reportProxyStatus(proxy, false, 500, Date.now() - startTime)
+      logYouTubeEgress(
+        'cipher-resolve',
+        'internal',
+        undefined,
+        'error',
+        Date.now() - startTime
+      )
       throw error
     }
 
     const { body, error, statusCode } = response
-    this.reportProxyStatus(
-      proxy,
-      !error && statusCode === 200,
-      statusCode ?? 500,
+    logYouTubeEgress(
+      'cipher-resolve',
+      'internal',
+      undefined,
+      statusCode ?? 'error',
       Date.now() - startTime
     )
 

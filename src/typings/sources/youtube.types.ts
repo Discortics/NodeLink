@@ -871,6 +871,8 @@ export type MakeRequestFn = (
 export interface ProxyEntry {
   /** Full proxy URL (e.g. `http://host:port` or `https://host`). */
   url: string
+  username?: string
+  password?: string
   /** Proxy protocol type. */
   type: 'forward' | 'reverse'
   /** Consecutive failure count since the last successful request. */
@@ -903,7 +905,14 @@ export type ProxySnapshot = ProxyEntry
  *
  * @public
  */
-export type RawProxyInput = string | { url: string; type?: string }
+export type RawProxyInput =
+  | string
+  | {
+      url: string
+      type?: 'forward' | 'reverse'
+      username?: string
+      password?: string
+    }
 
 /**
  * Per-source YouTube configuration pulled from `nodelink.options.sources.youtube`.
@@ -916,6 +925,7 @@ export type RawProxyInput = string | { url: string; type?: string }
 export interface YouTubeSourceConfig {
   /** List of proxy endpoints used for load-balanced requests. */
   proxies?: RawProxyInput[]
+  proxyMode?: 'off' | 'control' | 'all'
   /** Named client groups used for different operations. */
   clients: {
     /** Client names tried in order for search operations. */

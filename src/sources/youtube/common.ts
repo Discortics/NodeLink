@@ -534,7 +534,8 @@ function extractThumbnail(
 ): string | null {
   let resultUrl: string | null = null
 
-  const musicThumbnails = renderer?.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails
+  const musicThumbnails =
+    renderer?.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails
   const regularThumbnails = renderer?.thumbnail?.thumbnails
 
   if (Array.isArray(musicThumbnails) && musicThumbnails.length > 0) {
@@ -2116,7 +2117,10 @@ export abstract class BaseClient {
    * @param _rotate - Whether to rotate the proxy
    */
   getProxy(_rotate = false): HttpProxyConfig | undefined {
-    return undefined
+    const source = this.nodelink.sources?.getSource?.('youtube') as
+      | { getProxy?: (rotate?: boolean) => HttpProxyConfig | undefined }
+      | undefined
+    return source?.getProxy?.(_rotate)
   }
 
   /**

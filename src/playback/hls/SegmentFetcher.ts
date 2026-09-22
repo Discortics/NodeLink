@@ -62,6 +62,7 @@ export default class SegmentFetcher {
     username?: string
     password?: string
   } | null
+  private readonly onRequest: SegmentFetcherOptions['onRequest']
   private readonly onResolveUrl:
     | ((url: string) => Promise<string | null>)
     | null
@@ -76,6 +77,7 @@ export default class SegmentFetcher {
     this.headers = options.headers || {}
     this.localAddress = options.localAddress || null
     this.proxy = options.network?.proxy || options.proxy || null
+    this.onRequest = options.onRequest
     this.onResolveUrl = options.onResolveUrl || null
     this.keyMap = new Map()
   }
@@ -97,12 +99,14 @@ export default class SegmentFetcher {
       if (resolved) url = resolved
     }
 
+    const start = Date.now()
     const { body, error, statusCode } = await http1makeRequest(url, {
       headers: this.headers,
       responseType: 'buffer',
       localAddress: this.localAddress ?? undefined,
       proxy: this.proxy ?? undefined
     })
+    this.onRequest?.('key', statusCode ?? 'error', Date.now() - start)
 
     const bodyBuffer = body as Buffer | undefined
     if (error || statusCode !== 200 || !bodyBuffer || bodyBuffer.length === 0) {
@@ -144,12 +148,14 @@ export default class SegmentFetcher {
       headers.Range = `bytes=${mapInfo.byteRange.offset}-${end}`
     }
 
+    const start = Date.now()
     const { body, error, statusCode } = await http1makeRequest(mapInfo.uri, {
       headers,
       responseType: 'buffer',
       localAddress: this.localAddress ?? undefined,
       proxy: this.proxy ?? undefined
     })
+    this.onRequest?.('map', statusCode ?? 'error', Date.now() - start)
 
     if (error || (statusCode !== 200 && statusCode !== 206)) {
       throw new Error(`Map fetch failed: ${statusCode}`)
@@ -195,6 +201,7 @@ export default class SegmentFetcher {
       headers.Range = `bytes=${segment.byteRange.offset}-${end}`
     }
 
+    const start = Date.now()
     const { body, stream, error, statusCode } = await http1makeRequest(url, {
       headers,
       responseType: options.stream ? undefined : 'buffer',
@@ -203,6 +210,7 @@ export default class SegmentFetcher {
       proxy: this.proxy ?? undefined,
       timeout: 15000
     })
+    this.onRequest?.('segment', statusCode ?? 'error', Date.now() - start)
 
     if (error || (statusCode !== 200 && statusCode !== 206)) {
       if (statusCode === 403) {

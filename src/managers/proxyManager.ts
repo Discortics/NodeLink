@@ -442,7 +442,9 @@ export default class ProxyManager {
       const sources = isRecord(fullOptions.sources) ? fullOptions.sources : {}
       const yt = isRecord(sources.youtube) ? sources.youtube : {}
 
-      if (Array.isArray(yt.proxies)) {
+      // YouTube's explicit egress mode owns its pool. Inheriting that pool here
+      // would route unrelated sources through the residential proxy.
+      if (yt.proxyMode === undefined && Array.isArray(yt.proxies)) {
         for (const item of yt.proxies) {
           try {
             if (typeof item === 'string') {

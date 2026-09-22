@@ -81,6 +81,8 @@ export {
  * @public
  */
 export interface SabrStreamConfig {
+  /** Per-request media proxy; absent means direct egress. */
+  proxy?: import('../utils.types.ts').HttpProxyConfig
   /** YouTube video identifier (11-character ID). */
   videoId: string
 

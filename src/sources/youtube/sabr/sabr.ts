@@ -38,6 +38,7 @@ import type {
 } from '../../../typings/sources/sabr.types.ts'
 import { logger } from '../../../utils.ts'
 import { poTokenManager } from './potoken.ts'
+import { youtubeFetch } from '../egress.ts'
 import {
   base64ToU8,
   concatenateChunks,
@@ -2126,12 +2127,18 @@ export class SabrStream extends PassThrough {
     const t0 = Date.now()
     let res: Response
     try {
-      res = await fetch(url.toString(), {
-        method: 'POST',
-        headers,
-        body: Buffer.from(requestBody),
-        signal: this.abortController.signal
-      })
+      res = await youtubeFetch(
+        url.toString(),
+        {
+          method: 'POST',
+          headers,
+          body: Buffer.from(requestBody),
+          signal: this.abortController.signal
+        },
+        this.config.proxy,
+        'sabr',
+        'media'
+      )
     } catch (error) {
       if (
         this._aborted ||

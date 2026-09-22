@@ -31,6 +31,7 @@ import {
   makeRequest
 } from '../../utils.ts'
 import CipherManager from './CipherManager.ts'
+import { logYouTubeEgress, shouldProxyYouTube } from './egress.ts'
 import {
   checkURLType,
   YOUTUBE_CONSTANTS,
@@ -39,6 +40,7 @@ import {
 import YouTubeLiveChat from './LiveChat.ts'
 import OAuth from './OAuth.ts'
 import { SabrStream } from './sabr/sabr.ts'
+import { poTokenManager } from './sabr/potoken.ts'
 
 /** Size in bytes of each range-request chunk for direct HTTP streaming. */
 const CHUNK_SIZE = 64 * 1024
@@ -78,19 +80,40 @@ class YouTubeProxyManager {
    * @param rawProxies - Array of proxy URLs or configuration objects.
    */
   constructor(rawProxies: RawProxyInput[]) {
-    this.proxies = (rawProxies || []).map(
-      (p): ProxyEntry => ({
-        url: typeof p === 'string' ? p : p.url,
-        type: (typeof p === 'string' ? 'forward' : p.type || 'forward') as
-          | 'forward'
-          | 'reverse',
+    this.proxies = (rawProxies || []).map((p): ProxyEntry => {
+      const url = typeof p === 'string' ? p : p.url
+      const username = typeof p === 'string' ? undefined : p.username
+      const password = typeof p === 'string' ? undefined : p.password
+      const type = typeof p === 'string' ? 'forward' : p.type || 'forward'
+      let parsed: URL
+      try {
+        parsed = new URL(url)
+      } catch {
+        throw new Error('Invalid YouTube proxy URL')
+      }
+      if (
+        !['http:', 'https:'].includes(parsed.protocol) ||
+        !parsed.hostname ||
+        parsed.username ||
+        parsed.password ||
+        Boolean(username) !== Boolean(password) ||
+        !['forward', 'reverse'].includes(type) ||
+        (type === 'reverse' && (username || password))
+      ) {
+        throw new Error('Invalid YouTube proxy configuration')
+      }
+      return {
+        url,
+        username,
+        password,
+        type,
         failures: 0,
         lastFailure: 0,
         activeRequests: 0,
         score: 100,
         latency: 0
-      })
-    )
+      }
+    })
   }
 
   /**
@@ -255,7 +278,11 @@ export default class YouTubeSource {
     this.nodelink = nodelink
     this.config = nodelink.options.sources
       .youtube as unknown as YouTubeSourceConfig
+    if (!['off', 'control', 'all'].includes(this.config.proxyMode ?? 'all')) {
+      throw new Error('Invalid YouTube proxy mode')
+    }
     this.proxyManager = new YouTubeProxyManager(this.config.proxies || [])
+    poTokenManager.setProxyResolver(() => this.getProxy())
     this.additionalsSourceName = ['ytmusic']
     this.searchTerms = ['ytsearch', 'ytmsearch']
     this.recommendationTerm = ['ytrec']
@@ -297,6 +324,13 @@ export default class YouTubeSource {
    * @returns A {@link ProxySnapshot} of the selected proxy, or `undefined` if no proxies are configured.
    */
   getProxy(_rotate = true): ProxySnapshot | undefined {
+    if (!shouldProxyYouTube(this.config.proxyMode, 'control')) return undefined
+    return this.proxyManager.getBestProxy()
+  }
+
+  /** Selects media egress independently of YouTube control requests. */
+  getMediaProxy(): ProxySnapshot | undefined {
+    if (!shouldProxyYouTube(this.config.proxyMode, 'media')) return undefined
     return this.proxyManager.getBestProxy()
   }
 
@@ -517,13 +551,24 @@ export default class YouTubeSource {
     let playerScriptUrl: string | null = null
 
     try {
+      const proxy = this.getProxy()
+      const start = Date.now()
       const { body, error, statusCode } = await http1makeRequest(
         'https://music.youtube.com/sw.js_data',
         {
           method: 'GET',
           responseType: 'buffer',
-          disableBodyCompression: true
+          disableBodyCompression: true,
+          proxy
         }
+      )
+      logYouTubeEgress(
+        'visitor',
+        'control',
+        proxy,
+        statusCode || 'error',
+        Date.now() - start,
+        'client=music'
       )
       if (!error && statusCode === 200) {
         const text = (body as Buffer).toString('utf-8')
@@ -549,6 +594,8 @@ export default class YouTubeSource {
     }
     if (!visitorFound) {
       try {
+        const proxy = this.getProxy()
+        const start = Date.now()
         const {
           body: data,
           error,
@@ -557,8 +604,17 @@ export default class YouTubeSource {
           method: 'GET',
           headers: {
             Cookie: 'YSC=LUAfwHpna4E; VISITOR_INFO1_LIVE=Zuih2uZbq3I;'
-          }
+          },
+          proxy
         })
+        logYouTubeEgress(
+          'visitor',
+          'control',
+          proxy,
+          statusCode || 'error',
+          Date.now() - start,
+          'client=embed'
+        )
 
         if (!error && statusCode === 200) {
           const bodyStr = data as string
@@ -597,6 +653,8 @@ export default class YouTubeSource {
         }
 
         if (!visitorFound) {
+          const guideProxy = this.getProxy()
+          const guideStart = Date.now()
           const {
             body: guideData,
             error: guideError,
@@ -604,8 +662,17 @@ export default class YouTubeSource {
           } = await makeRequest('https://www.youtube.com/youtubei/v1/guide', {
             method: 'POST',
             body: { context: this.ytContext },
-            disableBodyCompression: true
+            disableBodyCompression: true,
+            proxy: guideProxy
           })
+          logYouTubeEgress(
+            'visitor',
+            'control',
+            guideProxy,
+            guideStatusCode || 'error',
+            Date.now() - guideStart,
+            'client=guide'
+          )
 
           const guideBody = guideData as {
             responseContext?: { visitorData?: string }
@@ -701,12 +768,22 @@ export default class YouTubeSource {
         )
         const searchProxy =
           clientName === 'Android' ? this.getProxy(true) : undefined
+        const searchStart = Date.now()
         const result = await client.search(
           query,
           searchType,
           this.ytContext,
           searchProxy,
           this.reportProxyStatus.bind(this)
+        )
+        logYouTubeEgress(
+          'search',
+          'control',
+          Boolean(this.config.proxies?.length) &&
+            shouldProxyYouTube(this.config.proxyMode, 'control'),
+          result?.loadType === 'search' ? 200 : 'empty',
+          Date.now() - searchStart,
+          `client=${clientName}`
         )
 
         if (result && result.loadType === 'search') {
@@ -1417,6 +1494,14 @@ export default class YouTubeSource {
         )
 
         const proxyLatency = Date.now() - proxyStartTime
+        logYouTubeEgress(
+          'player',
+          'control',
+          proxyToUse,
+          urlData.exception?.status || (urlData.exception ? 'error' : 200),
+          proxyLatency,
+          `client=${clientName} protocol=${urlData.protocol || 'unknown'}`
+        )
 
         if (urlData.exception) {
           const isNoStream = urlData.exception.cause === 'UpstreamNoStream'
@@ -1472,11 +1557,13 @@ export default class YouTubeSource {
         }
 
         if (urlData.url) {
+          const mediaProxy = this.getMediaProxy()
+          const mediaStartTime = Date.now()
           const check: HttpRequestResult = await http1makeRequest(urlData.url, {
             method: 'GET',
             headers: { Range: 'bytes=0-0' },
             streamOnly: true,
-            proxy: proxyToUse as unknown as HttpProxyConfig
+            proxy: mediaProxy as HttpProxyConfig
           })
 
           if (check.stream)
@@ -1485,11 +1572,19 @@ export default class YouTubeSource {
             ).destroy()
 
           this.reportProxyStatus(
-            proxyToUse,
+            mediaProxy,
             !check.error &&
               (check.statusCode === 200 || check.statusCode === 206),
             check.statusCode || 0,
-            Date.now() - proxyStartTime
+            Date.now() - mediaStartTime
+          )
+          logYouTubeEgress(
+            'preflight',
+            'media',
+            mediaProxy,
+            check.statusCode || 'error',
+            Date.now() - mediaStartTime,
+            `client=${clientName} protocol=http`
           )
 
           if (
@@ -1518,7 +1613,6 @@ export default class YouTubeSource {
               ...urlData,
               additionalData: {
                 contentLength,
-                proxy: proxyToUse,
                 itag: urlData.itag,
                 formats: urlData.formats,
                 client: clientName
@@ -1552,7 +1646,7 @@ export default class YouTubeSource {
                 method: 'GET',
                 headers: { Range: 'bytes=0-0' },
                 streamOnly: true,
-                proxy: proxyToUse as unknown as HttpProxyConfig
+                proxy: mediaProxy as HttpProxyConfig
               }
             )
 
@@ -1564,11 +1658,19 @@ export default class YouTubeSource {
               ).destroy()
 
             this.reportProxyStatus(
-              proxyToUse,
+              mediaProxy,
               !hlsCheck.error &&
                 (hlsCheck.statusCode === 200 || hlsCheck.statusCode === 206),
               hlsCheck.statusCode || 0,
-              Date.now() - proxyStartTime
+              Date.now() - mediaStartTime
+            )
+            logYouTubeEgress(
+              'preflight',
+              'media',
+              mediaProxy,
+              hlsCheck.statusCode || 'error',
+              Date.now() - mediaStartTime,
+              `client=${clientName} protocol=hls`
             )
 
             if (
@@ -1585,8 +1687,7 @@ export default class YouTubeSource {
                 protocol: 'hls',
                 format: 'mpegts',
                 additionalData: {
-                  client: clientName,
-                  proxy: proxyToUse
+                  client: clientName
                 }
               }
               this.nodelink.trackCacheManager?.set(
@@ -1603,13 +1704,15 @@ export default class YouTubeSource {
             logger('warn', 'YouTube', `Client ${clientName}: ${hlsError}`)
           }
         } else if (urlData.hlsUrl) {
+          const mediaProxy = this.getMediaProxy()
+          const mediaStartTime = Date.now()
           const hlsCheck: HttpRequestResult = await http1makeRequest(
             urlData.hlsUrl,
             {
               method: 'GET',
               headers: { Range: 'bytes=0-0' },
               streamOnly: true,
-              proxy: proxyToUse as unknown as HttpProxyConfig
+              proxy: mediaProxy as HttpProxyConfig
             }
           )
 
@@ -1619,11 +1722,19 @@ export default class YouTubeSource {
             ).destroy()
 
           this.reportProxyStatus(
-            proxyToUse,
+            mediaProxy,
             !hlsCheck.error &&
               (hlsCheck.statusCode === 200 || hlsCheck.statusCode === 206),
             hlsCheck.statusCode || 0,
-            Date.now() - proxyStartTime
+            Date.now() - mediaStartTime
+          )
+          logYouTubeEgress(
+            'preflight',
+            'media',
+            mediaProxy,
+            hlsCheck.statusCode || 'error',
+            Date.now() - mediaStartTime,
+            `client=${clientName} protocol=hls`
           )
 
           if (
@@ -1640,8 +1751,7 @@ export default class YouTubeSource {
               protocol: 'hls',
               format: 'mpegts',
               additionalData: {
-                client: clientName,
-                proxy: proxyToUse
+                client: clientName
               }
             }
             this.nodelink.trackCacheManager?.set(
@@ -1913,10 +2023,21 @@ export default class YouTubeSource {
       let contentLength = additionalData?.contentLength ?? null
 
       if (!contentLength) {
+        const mediaProxy = this.getMediaProxy()
+        const mediaStartTime = Date.now()
         const testResponse = await http1makeRequest(url, {
           method: 'HEAD',
-          timeout: 5000
+          timeout: 5000,
+          proxy: mediaProxy
         })
+        logYouTubeEgress(
+          'preflight',
+          'media',
+          mediaProxy,
+          testResponse.statusCode || 'error',
+          Date.now() - mediaStartTime,
+          'protocol=http method=HEAD'
+        )
 
         const headers = testResponse.headers as Record<
           string,
@@ -1935,7 +2056,7 @@ export default class YouTubeSource {
             method: 'GET',
             headers: { Range: 'bytes=0-0' },
             streamOnly: true,
-            proxy: this.getProxy() as unknown as HttpProxyConfig
+            proxy: this.getMediaProxy() as HttpProxyConfig
           })
 
           if (rangeResponse.stream)
@@ -2015,6 +2136,7 @@ export default class YouTubeSource {
     streamKey: string | symbol
   ): Promise<StreamResult> {
     const sabrConfig: SabrStreamConfig = {
+      proxy: this.getMediaProxy(),
       videoId: decodedTrack.identifier,
       accessToken: additionalData.accessToken,
       visitorData: additionalData.visitorData,
@@ -2213,8 +2335,19 @@ export default class YouTubeSource {
     streamKey: string | symbol
   ): StreamResult {
     const playerScriptPromise = this.cipherManager.getCachedPlayerScript()
+    const mediaProxy = this.getMediaProxy()
     const stream = new HLSHandler(url, {
       type: 'mpegts',
+      proxy: mediaProxy,
+      onRequest: (operation, status, durationMs) =>
+        logYouTubeEgress(
+          operation,
+          'media',
+          mediaProxy,
+          status,
+          durationMs,
+          'protocol=hls'
+        ),
       localAddress: this.nodelink.routePlanner?.getIP?.(),
       headers: {
         'User-Agent':
@@ -2281,22 +2414,28 @@ export default class YouTubeSource {
     additionalData?: TrackUrlAdditionalData
   ): Promise<StreamResult> {
     const fetchStartTime = Date.now()
+    const mediaProxy = this.getMediaProxy()
     const response = await http1makeRequest(url, {
       method: 'GET',
       streamOnly: true,
-      proxy: (additionalData?.proxy ||
-        this.getProxy()) as unknown as HttpProxyConfig,
+      proxy: mediaProxy,
       timeout: 20000
     })
 
     this.reportProxyStatus(
-      (additionalData?.proxy || this.getProxy(false)) as
-        | ProxySnapshot
-        | undefined,
+      mediaProxy,
       !response.error &&
         (response.statusCode === 200 || response.statusCode === 206),
       response.statusCode || 0,
       Date.now() - fetchStartTime
+    )
+    logYouTubeEgress(
+      'stream',
+      'media',
+      mediaProxy,
+      response.statusCode || 'error',
+      Date.now() - fetchStartTime,
+      'protocol=http'
     )
 
     if (response.statusCode !== 200 && response.statusCode !== 206) {
@@ -2486,12 +2625,12 @@ export default class YouTubeSource {
 
       try {
         const fetchStartTime = Date.now()
+        const mediaProxy = this.getMediaProxy()
         const result = await http1makeRequest(currentUrl, {
           method: 'GET',
           headers: { Range: `bytes=${start}-${end}` },
           streamOnly: true,
-          proxy: (currentAdditionalData?.proxy ||
-            this.getProxy()) as unknown as HttpProxyConfig,
+          proxy: mediaProxy,
           timeout: 20000
         })
 
@@ -2499,12 +2638,18 @@ export default class YouTubeSource {
         const { error, statusCode } = result
 
         this.reportProxyStatus(
-          (currentAdditionalData?.proxy || this.getProxy(false)) as
-            | ProxySnapshot
-            | undefined,
+          mediaProxy,
           !error && (statusCode === 200 || statusCode === 206),
           statusCode || 0,
           Date.now() - fetchStartTime
+        )
+        logYouTubeEgress(
+          'chunk',
+          'media',
+          mediaProxy,
+          statusCode || 'error',
+          Date.now() - fetchStartTime,
+          'protocol=http'
         )
 
         if (destroyed || cancelSignal.aborted) {
@@ -2839,12 +2984,7 @@ export default class YouTubeSource {
     })
 
     let currentUrl = url
-    let currentProxy = additionalData?.proxy as unknown as
-      | HttpProxyConfig
-      | undefined
-    if (!currentProxy) {
-      currentProxy = this.getProxy() as unknown as HttpProxyConfig
-    }
+    let currentProxy = this.getMediaProxy() as HttpProxyConfig | undefined
     let urlFetchTime = Date.now()
     let isDestroyed = false
     let isBackpressured = false
@@ -3048,9 +3188,7 @@ export default class YouTubeSource {
         }
 
         currentUrl = newUrlData.url
-        currentProxy =
-          (newAd?.proxy as unknown as HttpProxyConfig | undefined) ||
-          currentProxy
+        currentProxy = this.getMediaProxy() as HttpProxyConfig | undefined
         currentItag = newUrlData.itag || currentItag
         if (newUrlData.formats) availableFormats = newUrlData.formats
         if (totalBytesReceived === 0 && newAd?.contentLength) {
@@ -3161,6 +3299,14 @@ export default class YouTubeSource {
             !result.error && result.statusCode === 206,
             result.statusCode || 0,
             Date.now() - fetchStartTime
+          )
+          logYouTubeEgress(
+            'chunk',
+            'media',
+            proxyToUse,
+            result.statusCode || 'error',
+            Date.now() - fetchStartTime,
+            'protocol=http'
           )
 
           if (
