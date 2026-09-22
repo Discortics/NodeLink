@@ -2,7 +2,7 @@ name: Build and Push Discortics NodeLink Staging
 
 on:
   push:
-    branches: [dev]
+    branches: [discortics-yt-proxy]
   workflow_dispatch:
 
 permissions:
