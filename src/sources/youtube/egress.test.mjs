@@ -5,6 +5,7 @@ import { after, test } from 'node:test'
 import { once } from 'node:events'
 import { shouldProxyYouTube, youtubeFetch } from './egress.ts'
 import CipherManager from './CipherManager.ts'
+import SegmentFetcher from '../../playback/hls/SegmentFetcher.ts'
 import { http1makeRequest, makeRequest } from '../../utils.ts'
 
 const auth = `Basic ${Buffer.from('example-user:example-pass').toString('base64')}`
@@ -112,4 +113,24 @@ test('internal cipher health request stays direct even with a YouTube proxy', as
   } finally {
     cipher.cleanup()
   }
+})
+
+test('HLS segment fetcher uses its selected media route', async () => {
+  const segment = {
+    url: targetUrl,
+    duration: 1,
+    key: null,
+    map: null,
+    byteRange: null,
+    sequence: 1,
+    discontinuity: false
+  }
+  const before = proxyConnects
+  const proxied = await new SegmentFetcher({ proxy: proxyConfig }).fetchSegment(segment, { stream: false })
+  assert.equal(proxied.toString(), 'ok')
+  assert.ok(proxyConnects > before)
+  const afterProxied = proxyConnects
+  const direct = await new SegmentFetcher().fetchSegment(segment, { stream: false })
+  assert.equal(direct.toString(), 'ok')
+  assert.equal(proxyConnects, afterProxied)
 })
