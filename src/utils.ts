@@ -1623,6 +1623,10 @@ async function http1makeRequest(
       const isHttps = url.protocol === 'https:'
       let agent = options.agent
 
+      if (agent && proxy?.url && !useReverseProxy) {
+        throw new Error('A custom HTTP agent cannot be combined with a forward proxy.')
+      }
+
       if (!agent && proxy?.url && !useReverseProxy) {
         if (proxy?.url) {
           const proxyAgent = await getProxyAgent()

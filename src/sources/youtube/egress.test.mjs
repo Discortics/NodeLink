@@ -94,6 +94,10 @@ test('makeRequest options.proxy and HLS or HTTP preflight use authenticated prox
   assert.equal(direct.statusCode, 200)
   assert.equal(proxyConnects, afterHls)
   assert.ok(targetRequests >= 4)
+  await assert.rejects(
+    http1makeRequest(targetUrl, { method: 'GET', proxy: proxyConfig, agent: new http.Agent() }),
+    /cannot be combined with a forward proxy/u
+  )
 })
 
 test('internal cipher health request stays direct even with a YouTube proxy', async () => {
