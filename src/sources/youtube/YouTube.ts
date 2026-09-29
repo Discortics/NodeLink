@@ -380,6 +380,7 @@ export default class YouTubeSource {
       { default: TVCast },
       { default: Web },
       { default: WebEmbedded },
+      { default: WebParentTools },
       { default: VisionOs }
     ] = await Promise.all([
       import('./clients/Android.ts'),
@@ -392,6 +393,7 @@ export default class YouTubeSource {
       import('./clients/TVCast.ts'),
       import('./clients/Web.ts'),
       import('./clients/WebEmbedded.ts'),
+      import('./clients/WebParentTools.ts'),
       import('./clients/visionOs.ts')
     ])
 
@@ -406,6 +408,7 @@ export default class YouTubeSource {
       TVCast,
       Web,
       WebEmbedded,
+      WebParentTools,
       VisionOs
     }
 
@@ -773,7 +776,7 @@ export default class YouTubeSource {
           `Attempting ${searchType} search with client: ${clientName}`
         )
         const searchProxy =
-          clientName === 'Android' ? this.getProxy(true) : undefined
+          clientName === 'Android' ? this.getPlayerProxy() : undefined
         const searchStart = Date.now()
         const result = await client.search(
           query,
@@ -784,9 +787,8 @@ export default class YouTubeSource {
         )
         logYouTubeEgress(
           'search',
-          'control',
-          Boolean(this.config.proxies?.length) &&
-            shouldProxyYouTube(this.config.proxyMode, 'control'),
+          'player',
+          searchProxy,
           result?.loadType === 'search' ? 200 : 'empty',
           Date.now() - searchStart,
           `client=${clientName}`

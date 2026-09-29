@@ -112,7 +112,7 @@ export default class Android extends BaseClient {
       params
     }
 
-    const searchProxy = proxy || this.getProxy()
+    const searchProxy = proxy
     const searchStart = Date.now()
     try {
       const {
