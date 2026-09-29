@@ -354,7 +354,7 @@ export const config: NodelinkConfig = {
       },
       cipher: {
         url: 'https://cipher.kikkia.dev/api',
-        token: null
+        token: ''
       }
     },
 
