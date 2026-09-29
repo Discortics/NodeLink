@@ -438,7 +438,7 @@ export default class Web extends BaseClient {
             disableBodyCompression: true,
             timeout: YOUTUBE_PLAYER_REQUEST_TIMEOUT_MS,
             maxRetries: YOUTUBE_PLAYER_REQUEST_MAX_RETRIES,
-            proxy: proxy || this.getProxy()
+            proxy: proxy ?? this.getPlayerProxy()
           }
         )
 

@@ -3,7 +3,7 @@ import type { HttpProxyConfig } from '../../typings/utils.types.ts'
 import { logger } from '../../utils.ts'
 
 export type YouTubeProxyMode = 'off' | 'control' | 'all'
-export type YouTubeRequestClass = 'control' | 'media' | 'internal'
+export type YouTubeRequestClass = 'control' | 'player' | 'media' | 'internal'
 
 export const YOUTUBE_PLAYER_REQUEST_TIMEOUT_MS = 7000
 export const YOUTUBE_PLAYER_REQUEST_MAX_RETRIES = 1
@@ -14,8 +14,9 @@ export function shouldProxyYouTube(
   mode: YouTubeProxyMode | undefined,
   requestClass: YouTubeRequestClass
 ): boolean {
-  if (requestClass === 'internal' || mode === 'off') return false
-  return requestClass === 'control' || (mode ?? 'all') === 'all'
+  const resolvedMode = mode ?? 'all'
+  if (requestClass === 'internal' || resolvedMode === 'off') return false
+  return resolvedMode === 'all' || requestClass === 'control'
 }
 
 export function logYouTubeEgress(

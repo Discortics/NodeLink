@@ -2127,6 +2127,14 @@ export abstract class BaseClient {
     return source?.getProxy?.(_rotate)
   }
 
+  /** Returns the route selected specifically for Innertube player authorization. */
+  getPlayerProxy(): HttpProxyConfig | undefined {
+    const source = this.nodelink.sources?.getSource?.('youtube') as
+      | { getPlayerProxy?: () => HttpProxyConfig | undefined }
+      | undefined
+    return source?.getPlayerProxy?.()
+  }
+
   /**
    * Returns the client-specific context for innertube requests.
    * @param context - General YouTube context
@@ -2279,7 +2287,7 @@ export abstract class BaseClient {
         disableBodyCompression: true,
         timeout: YOUTUBE_PLAYER_REQUEST_TIMEOUT_MS,
         maxRetries: YOUTUBE_PLAYER_REQUEST_MAX_RETRIES,
-        proxy: proxy || this.getProxy()
+        proxy: proxy ?? this.getPlayerProxy()
       }
     )
 

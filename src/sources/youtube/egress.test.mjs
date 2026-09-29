@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict'
+import { once } from 'node:events'
 import http from 'node:http'
 import net from 'node:net'
 import { after, test } from 'node:test'
-import { once } from 'node:events'
-import { shouldProxyYouTube, youtubeFetch } from './egress.ts'
-import CipherManager from './CipherManager.ts'
 import SegmentFetcher from '../../playback/hls/SegmentFetcher.ts'
 import { http1makeRequest, makeRequest } from '../../utils.ts'
+import CipherManager from './CipherManager.ts'
+import { shouldProxyYouTube, youtubeFetch } from './egress.ts'
 
 const auth = `Basic ${Buffer.from('example-user:example-pass').toString('base64')}`
 let targetRequests = 0
@@ -23,10 +23,14 @@ const targetUrl = `http://127.0.0.1:${target.address().port}/sample`
 const proxy = http.createServer((request, response) => {
   assert.equal(request.headers['proxy-authorization'], auth)
   proxyConnects++
-  const upstream = http.request(targetUrl, { method: request.method }, (result) => {
-    response.writeHead(result.statusCode ?? 502, result.headers)
-    result.pipe(response)
-  })
+  const upstream = http.request(
+    targetUrl,
+    { method: request.method },
+    (result) => {
+      response.writeHead(result.statusCode ?? 502, result.headers)
+      result.pipe(response)
+    }
+  )
   upstream.on('error', () => response.destroy())
   request.pipe(upstream)
 })
@@ -57,36 +61,58 @@ after(() => {
   proxy.close()
 })
 
-test('request classification keeps internal cipher and control-mode media direct', () => {
+test('request classification keeps control-mode player, media, and internal cipher direct', () => {
   for (const mode of ['off', 'control', 'all']) {
     assert.equal(shouldProxyYouTube(mode, 'internal'), false)
   }
   assert.equal(shouldProxyYouTube('off', 'control'), false)
+  assert.equal(shouldProxyYouTube('off', 'player'), false)
   assert.equal(shouldProxyYouTube('control', 'control'), true)
+  assert.equal(shouldProxyYouTube('control', 'player'), false)
   assert.equal(shouldProxyYouTube('control', 'media'), false)
+  assert.equal(shouldProxyYouTube('all', 'control'), true)
+  assert.equal(shouldProxyYouTube('all', 'player'), true)
   assert.equal(shouldProxyYouTube('all', 'media'), true)
 })
 
 test('authenticated native fetch uses a per-request proxy for SABR and PO token traffic', async () => {
   const before = proxyConnects
-  const response = await youtubeFetch(targetUrl, {}, proxyConfig, 'sabr', 'media')
+  const response = await youtubeFetch(
+    targetUrl,
+    {},
+    proxyConfig,
+    'sabr',
+    'media'
+  )
   assert.equal(await response.text(), 'ok')
   assert.ok(proxyConnects > before)
 
   const afterProxy = proxyConnects
-  const direct = await youtubeFetch(targetUrl, {}, undefined, 'potoken', 'control')
+  const direct = await youtubeFetch(
+    targetUrl,
+    {},
+    undefined,
+    'potoken',
+    'control'
+  )
   assert.equal(await direct.text(), 'ok')
   assert.equal(proxyConnects, afterProxy)
 })
 
 test('makeRequest options.proxy and HLS or HTTP preflight use authenticated proxy transport', async () => {
   const before = proxyConnects
-  const control = await makeRequest(targetUrl, { method: 'GET', proxy: proxyConfig })
+  const control = await makeRequest(targetUrl, {
+    method: 'GET',
+    proxy: proxyConfig
+  })
   assert.equal(control.statusCode, 200)
   assert.ok(proxyConnects > before)
 
   const afterControl = proxyConnects
-  const hls = await http1makeRequest(targetUrl, { method: 'GET', proxy: proxyConfig })
+  const hls = await http1makeRequest(targetUrl, {
+    method: 'GET',
+    proxy: proxyConfig
+  })
   assert.equal(hls.statusCode, 200)
   assert.ok(proxyConnects > afterControl)
 
@@ -96,7 +122,11 @@ test('makeRequest options.proxy and HLS or HTTP preflight use authenticated prox
   assert.equal(proxyConnects, afterHls)
   assert.ok(targetRequests >= 4)
   await assert.rejects(
-    http1makeRequest(targetUrl, { method: 'GET', proxy: proxyConfig, agent: new http.Agent() }),
+    http1makeRequest(targetUrl, {
+      method: 'GET',
+      proxy: proxyConfig,
+      agent: new http.Agent()
+    }),
     /cannot be combined with a forward proxy/u
   )
 })
@@ -126,11 +156,16 @@ test('HLS segment fetcher uses its selected media route', async () => {
     discontinuity: false
   }
   const before = proxyConnects
-  const proxied = await new SegmentFetcher({ proxy: proxyConfig }).fetchSegment(segment, { stream: false })
+  const proxied = await new SegmentFetcher({ proxy: proxyConfig }).fetchSegment(
+    segment,
+    { stream: false }
+  )
   assert.equal(proxied.toString(), 'ok')
   assert.ok(proxyConnects > before)
   const afterProxied = proxyConnects
-  const direct = await new SegmentFetcher().fetchSegment(segment, { stream: false })
+  const direct = await new SegmentFetcher().fetchSegment(segment, {
+    stream: false
+  })
   assert.equal(direct.toString(), 'ok')
   assert.equal(proxyConnects, afterProxied)
 })

@@ -31,16 +31,16 @@ import {
   makeRequest
 } from '../../utils.ts'
 import CipherManager from './CipherManager.ts'
-import { logYouTubeEgress, shouldProxyYouTube } from './egress.ts'
 import {
   checkURLType,
   YOUTUBE_CONSTANTS,
   type YouTubeContext
 } from './common.ts'
+import { logYouTubeEgress, shouldProxyYouTube } from './egress.ts'
 import YouTubeLiveChat from './LiveChat.ts'
 import OAuth from './OAuth.ts'
-import { SabrStream } from './sabr/sabr.ts'
 import { poTokenManager } from './sabr/potoken.ts'
+import { SabrStream } from './sabr/sabr.ts'
 
 /** Size in bytes of each range-request chunk for direct HTTP streaming. */
 const CHUNK_SIZE = 64 * 1024
@@ -325,6 +325,12 @@ export default class YouTubeSource {
    */
   getProxy(_rotate = true): ProxySnapshot | undefined {
     if (!shouldProxyYouTube(this.config.proxyMode, 'control')) return undefined
+    return this.proxyManager.getBestProxy()
+  }
+
+  /** Selects player authorization egress independently of bootstrap and catalog requests. */
+  getPlayerProxy(): ProxySnapshot | undefined {
+    if (!shouldProxyYouTube(this.config.proxyMode, 'player')) return undefined
     return this.proxyManager.getBestProxy()
   }
 
@@ -1483,7 +1489,7 @@ export default class YouTubeSource {
           'YouTube',
           `Attempting to get track URL for ${decodedTrack.title} with client: ${clientName}`
         )
-        const proxyToUse = this.getProxy(true)
+        const proxyToUse = this.getPlayerProxy()
         const proxyStartTime = Date.now()
         const urlData: TrackUrlData = await client.getTrackUrl(
           decodedTrack,
@@ -1496,7 +1502,7 @@ export default class YouTubeSource {
         const proxyLatency = Date.now() - proxyStartTime
         logYouTubeEgress(
           'player',
-          'control',
+          'player',
           proxyToUse,
           urlData.exception?.status || (urlData.exception ? 'error' : 200),
           proxyLatency,
