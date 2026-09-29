@@ -39,6 +39,10 @@ import type {
   TrackEncodeInput
 } from '../../typings/utils.types.ts'
 import { encodeTrack, logger, makeRequest } from '../../utils.ts'
+import {
+  YOUTUBE_PLAYER_REQUEST_MAX_RETRIES,
+  YOUTUBE_PLAYER_REQUEST_TIMEOUT_MS
+} from './egress.ts'
 
 export {
   type AudioFormat,
@@ -2273,6 +2277,8 @@ export abstract class BaseClient {
         },
         body: requestBody,
         disableBodyCompression: true,
+        timeout: YOUTUBE_PLAYER_REQUEST_TIMEOUT_MS,
+        maxRetries: YOUTUBE_PLAYER_REQUEST_MAX_RETRIES,
         proxy: proxy || this.getProxy()
       }
     )

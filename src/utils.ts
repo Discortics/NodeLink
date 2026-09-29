@@ -1610,6 +1610,30 @@ async function http1makeRequest(
   const { maxRetries = 3, proxy } = options
   let attempt = 0
 
+  const isRetryableError = (error: NodeJS.ErrnoException): boolean => {
+    const retryableCodes = new Set([
+      'ECONNRESET',
+      'ETIMEDOUT',
+      'EPIPE',
+      'ENETUNREACH',
+      'EHOSTUNREACH'
+    ])
+    const cause = error.cause as NodeJS.ErrnoException | undefined
+    if (
+      retryableCodes.has(String(error.code || '')) ||
+      retryableCodes.has(String(cause?.code || ''))
+    ) {
+      return true
+    }
+
+    if (!proxy?.url || shouldUseReverseProxy(proxy)) return false
+
+    const message = `${error.message} ${cause?.message ?? ''}`
+    return /proxy connection ended before receiving connect response|request timed out|socket hang up|econnreset|etimedout/i.test(
+      message
+    )
+  }
+
   while (true) {
     try {
       let finalUrl = urlString
@@ -1624,7 +1648,9 @@ async function http1makeRequest(
       let agent = options.agent
 
       if (agent && proxy?.url && !useReverseProxy) {
-        throw new Error('A custom HTTP agent cannot be combined with a forward proxy.')
+        throw new Error(
+          'A custom HTTP agent cannot be combined with a forward proxy.'
+        )
       }
 
       if (!agent && proxy?.url && !useReverseProxy) {
@@ -1662,14 +1688,8 @@ async function http1makeRequest(
       return await _internalHttp1Request(finalUrl, newOptions)
     } catch (err) {
       const error = err as NodeJS.ErrnoException
-      const code = error.code ? String(error.code) : ''
-      const isRetryable = [
-        'ECONNRESET',
-        'ETIMEDOUT',
-        'EPIPE',
-        'ENETUNREACH',
-        'EHOSTUNREACH'
-      ].includes(code)
+      const code = error.code ? String(error.code) : 'proxy-transport'
+      const isRetryable = isRetryableError(error)
 
       if (isRetryable && attempt < maxRetries) {
         attempt++

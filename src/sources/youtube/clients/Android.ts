@@ -135,6 +135,8 @@ export default class Android extends BaseClient {
           },
           body: requestBody,
           disableBodyCompression: true,
+          timeout: 8000,
+          maxRetries: 2,
           proxy: searchProxy
         }
       )

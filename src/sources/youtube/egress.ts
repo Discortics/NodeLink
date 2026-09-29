@@ -5,6 +5,9 @@ import { logger } from '../../utils.ts'
 export type YouTubeProxyMode = 'off' | 'control' | 'all'
 export type YouTubeRequestClass = 'control' | 'media' | 'internal'
 
+export const YOUTUBE_PLAYER_REQUEST_TIMEOUT_MS = 7000
+export const YOUTUBE_PLAYER_REQUEST_MAX_RETRIES = 1
+
 const agents = new Map<string, ProxyAgent>()
 
 export function shouldProxyYouTube(
@@ -25,7 +28,7 @@ export function logYouTubeEgress(
 ): void {
   logger(
     'debug',
-    'YouTubeRouting',
+    'youtubeRouting',
     `egress operation=${operation} class=${requestClass} route=${proxy ? 'proxy' : 'direct'} status=${status} durationMs=${durationMs}${detail ? ` ${detail}` : ''}`
   )
 }

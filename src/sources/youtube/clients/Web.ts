@@ -40,6 +40,10 @@ import {
   checkURLType,
   YOUTUBE_CONSTANTS
 } from '../common.ts'
+import {
+  YOUTUBE_PLAYER_REQUEST_MAX_RETRIES,
+  YOUTUBE_PLAYER_REQUEST_TIMEOUT_MS
+} from '../egress.ts'
 import { poTokenManager } from '../sabr/potoken.ts'
 
 /**
@@ -432,6 +436,8 @@ export default class Web extends BaseClient {
             },
             body: requestBody,
             disableBodyCompression: true,
+            timeout: YOUTUBE_PLAYER_REQUEST_TIMEOUT_MS,
+            maxRetries: YOUTUBE_PLAYER_REQUEST_MAX_RETRIES,
             proxy: proxy || this.getProxy()
           }
         )
