@@ -380,7 +380,6 @@ export default class YouTubeSource {
       { default: TVCast },
       { default: Web },
       { default: WebEmbedded },
-      { default: WebParentTools },
       { default: VisionOs }
     ] = await Promise.all([
       import('./clients/Android.ts'),
@@ -393,7 +392,6 @@ export default class YouTubeSource {
       import('./clients/TVCast.ts'),
       import('./clients/Web.ts'),
       import('./clients/WebEmbedded.ts'),
-      import('./clients/WebParentTools.ts'),
       import('./clients/visionOs.ts')
     ])
 
@@ -408,7 +406,6 @@ export default class YouTubeSource {
       TVCast,
       Web,
       WebEmbedded,
-      WebParentTools,
       VisionOs
     }
 
