@@ -2,11 +2,13 @@ import cluster from 'node:cluster';
 import { EventEmitter } from 'node:events';
 import process from 'node:process';
 import WebSocketServer from '@performanc/pwsl-server';
-import { checkUpdates, printStartupBanner, printSupportGuidelines } from './bootstrap/branding.js';
+import { checkPostUpdateNotice, checkUpdates, printStartupBanner, printSupportGuidelines } from './bootstrap/branding.js';
 import { broadcastWorkerFailure, setupClusterWorkerSocket } from './bootstrap/cluster.js';
 import { loadBootstrapConfig } from './bootstrap/config.js';
 import { memoryTrace, setupProcessGuards, validateRuntime } from './bootstrap/runtime.js';
 import { setupGracefulShutdown } from './bootstrap/shutdown.js';
+import { setupPeriodicUpdateCheck } from './bootstrap/updater/scheduler.js';
+import AdmissionManager from './managers/admissionManager.js';
 import ConfigValidationManager from './managers/configValidationManager.js';
 import DosProtectionManager from './managers/dosProtectionManager.js';
 import PluginManager from './managers/pluginManager.js';
@@ -36,6 +38,7 @@ class NodelinkServer extends EventEmitter {
     statsManager;
     rateLimitManager;
     dosProtectionManager;
+    admissionManager;
     pluginManager;
     voiceRouter;
     voiceRelay;
@@ -69,6 +72,7 @@ class NodelinkServer extends EventEmitter {
         this.statsManager = new StatsManager(this);
         this.rateLimitManager = new RateLimitManager(this);
         this.dosProtectionManager = new DosProtectionManager(this);
+        this.admissionManager = new AdmissionManager(this, options.admission);
         this.pluginManager = new PluginManager(this);
         this.voiceRouter = new VoiceRouter();
         this.voiceRelay = createVoiceRelay({
@@ -121,6 +125,7 @@ class NodelinkServer extends EventEmitter {
         this.routePlanner.dispose();
         this.rateLimitManager.destroy();
         this.dosProtectionManager.destroy();
+        this.admissionManager.destroy();
         await this._cleanupWebSocketServer();
         const httpServer = this.server;
         if (httpServer?.listening) {
@@ -188,7 +193,7 @@ class NodelinkServer extends EventEmitter {
         if (options.isClusterWorker) {
             setupClusterWorkerSocket(this.server);
         }
-        else {
+        else if (!this.usingBunServer) {
             const port = this.options.server.port;
             const host = this.options.server.host || '0.0.0.0';
             logger('info', 'Server', `Attempting to listen on host: ${host}, port: ${port}`);
@@ -228,6 +233,19 @@ class NodelinkServer extends EventEmitter {
             case 'workerFailed':
                 broadcastWorkerFailure(this.sessions, message.payload.workerId, message.payload.affectedGuilds);
                 break;
+            case 'ipBlock': {
+                const payload = message;
+                if (payload.ip) {
+                    const duration = payload.durationMs ?? 300000;
+                    this.admissionManager.blockIp(payload.ip, duration);
+                    if (this.workerManager) {
+                        for (const worker of this.workerManager.workers) {
+                            worker.send?.(message);
+                        }
+                    }
+                }
+                break;
+            }
         }
     }
     registerSource(name, source) {
@@ -284,7 +302,8 @@ const { config, clusterEnabled } = await loadBootstrapConfig();
 if (!cluster.isWorker) {
     printSupportGuidelines();
     printStartupBanner(String(getVersion()), clusterEnabled);
-    await checkUpdates();
+    await checkPostUpdateNotice();
+    await checkUpdates(config);
 }
 await startNodeLink({ config, clusterEnabled });
 async function startNodeLink({ config, clusterEnabled }) {
@@ -311,6 +330,7 @@ async function startNodeLink({ config, clusterEnabled }) {
     globalThis.nodelink =
         nserver;
     setupGracefulShutdown(nserver);
+    setupPeriodicUpdateCheck(nserver, config);
 }
 export default NodelinkServer;
 export { NodelinkServer };

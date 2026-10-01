@@ -6,6 +6,7 @@ import process from 'node:process'
 import WebSocketServer from '@performanc/pwsl-server'
 
 import {
+  checkPostUpdateNotice,
   checkUpdates,
   printStartupBanner,
   printSupportGuidelines
@@ -21,6 +22,8 @@ import {
   validateRuntime
 } from './bootstrap/runtime.ts'
 import { setupGracefulShutdown } from './bootstrap/shutdown.ts'
+import { setupPeriodicUpdateCheck } from './bootstrap/updater/scheduler.ts'
+import AdmissionManager from './managers/admissionManager.ts'
 import ConfigValidationManager from './managers/configValidationManager.ts'
 import type ConnectionManager from './managers/connectionManager.ts'
 import type CredentialManager from './managers/credentialManager.ts'
@@ -103,6 +106,7 @@ class NodelinkServer extends EventEmitter {
   readonly statsManager: StatsManager
   readonly rateLimitManager: RateLimitManager
   readonly dosProtectionManager: DosProtectionManager
+  readonly admissionManager: AdmissionManager
   readonly pluginManager: PluginManager
 
   readonly voiceRouter: VoiceRouter
@@ -147,6 +151,7 @@ class NodelinkServer extends EventEmitter {
     this.statsManager = new StatsManager(this)
     this.rateLimitManager = new RateLimitManager(this)
     this.dosProtectionManager = new DosProtectionManager(this)
+    this.admissionManager = new AdmissionManager(this, options.admission)
     this.pluginManager = new PluginManager(this)
 
     this.voiceRouter = new VoiceRouter()
@@ -209,6 +214,7 @@ class NodelinkServer extends EventEmitter {
     this.routePlanner.dispose()
     this.rateLimitManager.destroy()
     this.dosProtectionManager.destroy()
+    this.admissionManager.destroy()
 
     await this._cleanupWebSocketServer()
 
@@ -301,7 +307,7 @@ class NodelinkServer extends EventEmitter {
 
     if (options.isClusterWorker) {
       setupClusterWorkerSocket(this.server)
-    } else {
+    } else if (!this.usingBunServer) {
       const port = this.options.server.port
       const host = this.options.server.host || '0.0.0.0'
       logger(
@@ -365,6 +371,24 @@ class NodelinkServer extends EventEmitter {
           message.payload.affectedGuilds
         )
         break
+
+      case 'ipBlock': {
+        const payload = message as unknown as {
+          ip?: string
+          durationMs?: number
+        }
+        if (payload.ip) {
+          const duration = payload.durationMs ?? 300000
+          this.admissionManager.blockIp(payload.ip, duration)
+
+          if (this.workerManager) {
+            for (const worker of this.workerManager.workers) {
+              worker.send?.(message)
+            }
+          }
+        }
+        break
+      }
     }
   }
 
@@ -444,7 +468,8 @@ const { config, clusterEnabled } = await loadBootstrapConfig()
 if (!cluster.isWorker) {
   printSupportGuidelines()
   printStartupBanner(String(getVersion()), clusterEnabled)
-  await checkUpdates()
+  await checkPostUpdateNotice()
+  await checkUpdates(config)
 }
 
 await startNodeLink({ config, clusterEnabled })
@@ -487,6 +512,7 @@ async function startNodeLink({
     nserver
 
   setupGracefulShutdown(nserver)
+  setupPeriodicUpdateCheck(nserver, config)
 }
 
 export default NodelinkServer
