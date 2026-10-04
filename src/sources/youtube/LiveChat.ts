@@ -33,7 +33,7 @@ import Web from './clients/Web.ts'
  * @example
  * ```typescript
  * const liveChat = new LiveChat(nodelink, {
- *   getProxy: () => undefined,
+ *   getPlayerProxy: () => undefined,
  *   getContext: () => ytContext
  * })
  *
@@ -147,7 +147,7 @@ export default class LiveChat {
                   continuation
                 },
                 disableBodyCompression: true,
-                proxy: this.source.getProxy()
+                proxy: this.source.getPlayerProxy()
               }
             )
 

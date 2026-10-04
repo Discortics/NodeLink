@@ -2117,7 +2117,7 @@ export abstract class BaseClient {
   }
 
   /**
-   * Returns a proxy configuration if available.
+   * Returns a proxy for anonymous visitor bootstrap only.
    * @param _rotate - Whether to rotate the proxy
    */
   getProxy(_rotate = false): HttpProxyConfig | undefined {
@@ -2333,7 +2333,7 @@ export abstract class BaseClient {
         },
         body: requestBody,
         disableBodyCompression: true,
-        proxy: proxy || this.getProxy()
+        proxy: proxy ?? this.getPlayerProxy()
       }
     )
 
@@ -2577,7 +2577,7 @@ export abstract class BaseClient {
           },
           body: { context: client, continuation },
           disableBodyCompression: true,
-          proxy: this.getProxy()
+          proxy: this.getPlayerProxy()
         }
       )
       if (statusCode !== 200 || !body) break
@@ -2779,7 +2779,7 @@ export abstract class BaseClient {
           },
           body: { context: client, continuation },
           disableBodyCompression: true,
-          proxy: this.getProxy()
+          proxy: this.getPlayerProxy()
         }
       )
       if (statusCode !== 200 || !body) break
@@ -3384,7 +3384,7 @@ export abstract class BaseClient {
             },
             method: 'POST',
             disableBodyCompression: true,
-            proxy: this.getProxy()
+            proxy: this.getPlayerProxy()
           }
         )
 

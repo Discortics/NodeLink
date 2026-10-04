@@ -395,7 +395,7 @@ export default class Android extends BaseClient {
           requestBody.videoId = currentVideoId
         }
 
-        const playlistProxy = this.getProxy()
+        const playlistProxy = this.getPlayerProxy()
         const playlistStart = Date.now()
         const { body: playlistResponseRaw, statusCode } = await makeRequest(
           `${apiEndpoint}/youtubei/v1/${isRadio ? 'next' : 'browse'}`,

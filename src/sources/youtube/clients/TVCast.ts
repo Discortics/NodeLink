@@ -196,7 +196,7 @@ export default class TVCast extends BaseClient {
             body: requestBody,
             method: 'POST',
             disableBodyCompression: true,
-            proxy: this.getProxy()
+            proxy: this.getPlayerProxy()
           }
         )
 

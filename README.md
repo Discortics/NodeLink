@@ -84,6 +84,14 @@ docker run -p 2333:2333 nodelink
 
 **See the Docker guide:** [nodelink.js.org/docs/advanced/docker](https://nodelink.js.org/docs/advanced/docker)
 
+### YouTube proxy routing
+
+Set `sources.youtube.proxyMode` (or `NODELINK_SOURCES_YOUTUBE_PROXYMODE`) to `off`, `control`, or `all`.
+
+In `control` mode, configured YouTube proxies are used only for anonymous visitor identity, player-script discovery/download, and PO-token bootstrap. Searches, video resolution, playlists and their continuation pages, recommendations/radio mixes, chapters, live chat, player authorization, and audio requests use direct egress. Playback checks still verify that each selected video is playable.
+
+`off` disables YouTube proxy routing. `all` also enables proxies for catalog/player and media requests. Requests to the internal cipher service stay direct in every mode.
+
 ---
 
 ## Usage

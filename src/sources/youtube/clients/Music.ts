@@ -299,7 +299,7 @@ export default class Music extends BaseClient {
               'X-Goog-Api-Format-Version': '2'
             },
             disableBodyCompression: true,
-            proxy: this.getProxy()
+            proxy: this.getPlayerProxy()
           }
         )
 

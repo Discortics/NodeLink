@@ -257,7 +257,7 @@ export interface YouTubeLiveChatSource {
    *
    * @returns Proxy configuration, or `undefined` when polling directly.
    */
-  getProxy: () => HttpProxyConfig | undefined
+  getPlayerProxy: () => HttpProxyConfig | undefined
 
   /**
    * Returns the current YouTube innertube context.

@@ -299,7 +299,7 @@ export default class YouTubeSource {
     this.failingClientsInterval = null
     this.cipherManager = new CipherManager(nodelink)
     this.liveChat = new YouTubeLiveChat(nodelink, {
-      getProxy: this.getProxy.bind(this),
+      getPlayerProxy: this.getPlayerProxy.bind(this),
       getContext: () => this.ytContext
     })
     this.activeStreams = new Map()
@@ -319,7 +319,7 @@ export default class YouTubeSource {
   }
 
   /**
-   * Returns the healthiest available proxy from the managed pool.
+   * Returns the healthiest proxy for identity, player-script, and PO-token bootstrap.
    * @param _rotate - Whether to rotate the proxy selection (currently unused, kept for interface compatibility).
    * @returns A {@link ProxySnapshot} of the selected proxy, or `undefined` if no proxies are configured.
    */
@@ -328,7 +328,7 @@ export default class YouTubeSource {
     return this.proxyManager.getBestProxy()
   }
 
-  /** Selects catalog search and player egress independently of bootstrap requests. */
+  /** Selects video catalog, metadata, and player egress independently of bootstrap requests. */
   getPlayerProxy(): ProxySnapshot | undefined {
     if (!shouldProxyYouTube(this.config.proxyMode, 'player')) return undefined
     return this.proxyManager.getBestProxy()
