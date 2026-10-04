@@ -133,7 +133,7 @@ export default class Web extends BaseClient {
       },
       body: requestBody,
       disableBodyCompression: true,
-      proxy: this.getProxy()
+      proxy: this.getPlayerProxy()
     })
 
     const searchResult = searchResultRaw as YouTubeSearchResponse

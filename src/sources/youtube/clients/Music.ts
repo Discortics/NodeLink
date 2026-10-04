@@ -118,7 +118,7 @@ export default class Music extends BaseClient {
       },
       body: requestBody,
       disableBodyCompression: true,
-      proxy: this.getProxy()
+      proxy: this.getPlayerProxy()
     })
 
     const searchResult = searchResultRaw as YouTubeSearchResponse

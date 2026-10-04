@@ -120,7 +120,7 @@ export default class WebRemix extends BaseClient {
         },
         body: requestBody,
         disableBodyCompression: true,
-        proxy: this.getProxy()
+        proxy: this.getPlayerProxy()
       }
     )
 

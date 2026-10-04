@@ -328,7 +328,7 @@ export default class YouTubeSource {
     return this.proxyManager.getBestProxy()
   }
 
-  /** Selects player authorization egress independently of bootstrap and catalog requests. */
+  /** Selects catalog search and player egress independently of bootstrap requests. */
   getPlayerProxy(): ProxySnapshot | undefined {
     if (!shouldProxyYouTube(this.config.proxyMode, 'player')) return undefined
     return this.proxyManager.getBestProxy()
@@ -772,8 +772,7 @@ export default class YouTubeSource {
           'YouTube',
           `Attempting ${searchType} search with client: ${clientName}`
         )
-        const searchProxy =
-          clientName === 'Android' ? this.getPlayerProxy() : undefined
+        const searchProxy = this.getPlayerProxy()
         const searchStart = Date.now()
         const result = await client.search(
           query,

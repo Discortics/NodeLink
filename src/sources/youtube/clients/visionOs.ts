@@ -131,7 +131,7 @@ export default class VisionOs extends BaseClient {
           },
           body: requestBody,
           disableBodyCompression: true,
-          proxy: this.getProxy()
+          proxy: this.getPlayerProxy()
         }
       )
 

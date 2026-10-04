@@ -2127,7 +2127,7 @@ export abstract class BaseClient {
     return source?.getProxy?.(_rotate)
   }
 
-  /** Returns the route selected specifically for Innertube player authorization. */
+  /** Returns the shared route for Innertube search and player authorization. */
   getPlayerProxy(): HttpProxyConfig | undefined {
     const source = this.nodelink.sources?.getSource?.('youtube') as
       | { getPlayerProxy?: () => HttpProxyConfig | undefined }
